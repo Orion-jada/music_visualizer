@@ -1,16 +1,46 @@
-# React + Vite
+# Waveform.viz
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A stunning 3D music visualizer web application built with React, Three.js, and the Web Audio API.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Real-time Audio Analysis**: Visualizes frequency data from uploaded audio files.
+- **Two Visualizer Modes**:
+  - **Spectrum Ring**: A circular array of bars reacting to frequency, with a pulsing center.
+  - **Particle Wave**: A flowing grid of particles animated by Simplex noise and bass frequencies.
+- **Post-Processing Effects**: Configurable Bloom (glow) and Vignette for a cinematic look.
+- **Drag & Drop**: Simply drag an MP3 or WAV file onto the screen to play.
+- **Export to Video**: Record your visualization directly from the browser to a `.webm` or `.mp4` video file.
+- **Customizable**: Use the control panel to tweak colors, bloom intensity, and more.
 
-## React Compiler
+## Prerequisites
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Node.js (v16 or higher recommended)
+- npm (usually comes with Node.js)
 
-## Expanding the ESLint configuration
+## How to Run Locally
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+1.  **Install Dependencies**
+    ```bash
+    npm install
+    ```
+
+2.  **Start Development Server**
+    ```bash
+    npm run dev
+    ```
+    Open your browser to the URL shown (usually `http://localhost:5173`).
+
+3.  **Build for Production**
+    ```bash
+    npm run build
+    npm run preview
+    ```
+
+## Usage
+
+1.  **Upload Music**: Click the "Select File" button or drag and drop an audio file (MP3/WAV) anywhere on the window.
+2.  **Controls**:
+    - **Play/Pause**: Toggle playback.
+    - **Record**: Click the video icon to start recording the canvas and audio. Click stop to save the file.
+    - **Settings**: Use the floating panel (Leva) on the right to change visualizer modes, colors, and effect intensity.
