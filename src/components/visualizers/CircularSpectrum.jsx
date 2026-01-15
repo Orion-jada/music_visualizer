@@ -3,109 +3,117 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useAudio } from '../../context/AudioContext';
 
-const COUNT = 120; // Number of bars
-const RADIUS = 2; // Radius of the circle
+const COUNT = 360; // Denser bars for a ring look
+const RADIUS = 3;
 
 export const CircularSpectrum = ({ color, midColor, lowColor }) => {
   const meshRef = useRef();
-  const { getFrequencyData } = useAudio();
+  const { getFrequencyData, getAudioMetrics } = useAudio();
 
-  // Dummy object for calculating matrix
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  // Pre-allocate colors array for instance coloring
+  const colors = useMemo(() => new Float32Array(COUNT * 3), []);
 
-  // Initial positions
-  useEffect(() => {
-    if (!meshRef.current) return;
-
-    for (let i = 0; i < COUNT; i++) {
-      const angle = (i / COUNT) * Math.PI * 2;
-      const x = Math.cos(angle) * RADIUS;
-      const y = Math.sin(angle) * RADIUS;
-
-      dummy.position.set(x, y, 0);
-      dummy.rotation.z = angle;
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
-    }
-    meshRef.current.instanceMatrix.needsUpdate = true;
-  }, [dummy]);
+  const color1 = useMemo(() => new THREE.Color(lowColor || "#ff0000"), [lowColor]);
+  const color2 = useMemo(() => new THREE.Color(midColor || "#00ff00"), [midColor]);
+  const color3 = useMemo(() => new THREE.Color(color || "#0000ff"), [color]);
 
   useFrame(() => {
     if (!meshRef.current) return;
 
     const data = getFrequencyData();
-    // data is typically 1024 length
-    // We map our 120 bars to the data
-    // We want bass (low index) to be significant.
-    // Let's wrap: index 0 is at bottom (3*PI/2) or top.
+    const { bass } = getAudioMetrics();
 
-    // We'll map the 120 bars to the first ~200-300 bins where most music energy is.
-    const step = Math.floor(data.length / COUNT); // linear sampling is okay for now
+    // Smooth bass factor for global pump
+    const pump = 1 + bass * 0.2;
 
     for (let i = 0; i < COUNT; i++) {
-        // Mirrored spectrum logic
-        // 0 -> COUNT/2 -> 0
-        // adjustedIndex maps i (0..120) to spectrum (0..60..0)
-        let spectrumIndex = i < COUNT / 2 ? i : COUNT - i;
-        spectrumIndex = Math.floor(spectrumIndex * (data.length * 0.4) / (COUNT / 2));
-        // using 40% of the frequency range (bass/mids)
+        // Mirrored mapping:
+        // 0 (Top) -> Low Freqs
+        // COUNT/2 (Bottom) -> High Freqs -> Low Freqs?
+        // Actually typically Top is Highs or Lows.
+        // Let's do: 0 (Right) -> Lows, COUNT/2 (Left) -> Highs.
+        // Or 0 is Top.
 
-        const value = data[spectrumIndex] || 0;
-        const scale = 1 + (value / 255) * 4; // Scale 1 to 5
+        // Let's make it symmetrical: 0 and COUNT are Top (Highs), COUNT/2 is Bottom (Lows).
+        // Or Center Top (Lows) mirroring down to Bottom (Highs).
+
+        // Let's do: Top (index 0) is Bass. Bottom (index 180) is Treble.
+        // It's a mirrored half-circle.
+
+        const distFromTop = Math.abs(i - COUNT / 2); // 0 at bottom, 180 at top
+        // Remap to 0..1
+        const normalizedIndex = Math.abs((i - COUNT/4 * 3) % (COUNT/2)) / (COUNT/2);
+
+        // Simpler Mirror:
+        // i goes 0 -> 360.
+        // spectrumIndex needs to go 0 -> 100 -> 0.
+        let spectrumIndex = i <= COUNT / 2 ? i : COUNT - i; // 0..180
+
+        // Map 0..180 to 0..100 (frequency bin subset)
+        // We use first 120 bins mostly
+        const dataIndex = Math.floor(spectrumIndex * (120 / (COUNT / 2)));
+
+        const val = data[dataIndex] || 0;
+        const nVal = val / 255;
+
+        const scale = 0.5 + Math.pow(nVal, 2) * 8 * pump; // Exponential curve for punchiness
 
         const angle = (i / COUNT) * Math.PI * 2;
 
-        dummy.position.set(Math.cos(angle) * RADIUS, Math.sin(angle) * RADIUS, 0);
+        dummy.position.set(Math.cos(angle) * RADIUS * pump, Math.sin(angle) * RADIUS * pump, 0);
         dummy.rotation.z = angle;
 
-        // Scale along the local X (which points outwards due to rotation)
-        dummy.scale.set(scale, 0.4 + (scale * 0.1), 0.2);
-
+        dummy.scale.set(scale, 0.2, 0.1);
         dummy.updateMatrix();
         meshRef.current.setMatrixAt(i, dummy.matrix);
 
-        // Dynamic Coloring logic could go here if using instanceColor
+        // Color Interpolation
+        // Low index (bass) -> color1
+        // High index -> color3
+        const mixedColor = new THREE.Color().copy(color1).lerp(color3, nVal);
+        // Add brightness based on intensity
+        mixedColor.multiplyScalar(1 + nVal * 2);
+
+        meshRef.current.setColorAt(i, mixedColor);
     }
     meshRef.current.instanceMatrix.needsUpdate = true;
+    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
   });
 
   return (
     <group>
       <instancedMesh ref={meshRef} args={[null, null, COUNT]}>
-        <boxGeometry args={[0.1, 0.5, 0.1]} /> {/* Base size */}
+        <boxGeometry args={[0.1, 0.4, 0.05]} />
         <meshStandardMaterial
-            color={color}
-            toneMapped={false} // Important for Bloom!
-            emissive={color}
-            emissiveIntensity={2}
+            toneMapped={false}
+            vertexColors
+            transparent
+            opacity={0.9}
         />
       </instancedMesh>
 
-      {/* Center Pulse Circle */}
-      <CenterPulse />
+      {/* Inner Glow Ring */}
+      <InnerRing color={color1} />
     </group>
   );
 };
 
-const CenterPulse = () => {
+const InnerRing = ({ color }) => {
     const mesh = useRef();
-    const { getFrequencyData } = useAudio();
+    const { getAudioMetrics } = useAudio();
 
     useFrame(() => {
-        const data = getFrequencyData();
-        // Average bass frequencies (0-20)
-        let sum = 0;
-        for(let i=0; i<20; i++) sum += data[i];
-        const avg = sum / 20;
-
-        const scale = 1 + (avg / 255) * 1.5;
-        mesh.current.scale.setScalar(scale);
+        const { bass } = getAudioMetrics();
+        const s = 2.8 + (bass * 0.5);
+        mesh.current.scale.setScalar(s);
+        mesh.current.rotation.z -= 0.005;
     });
 
     return (
         <mesh ref={mesh}>
-            <circleGeometry args={[1, 32]} />
-            <meshBasicMaterial color="#ffffff" transparent opacity={0.1} />
+            <torusGeometry args={[1, 0.02, 16, 100]} />
+            <meshBasicMaterial color={color} toneMapped={false} transparent opacity={0.5} />
         </mesh>
     );
-}
+};

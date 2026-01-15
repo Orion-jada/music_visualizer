@@ -4,82 +4,83 @@ import * as THREE from 'three';
 import { createNoise3D } from 'simplex-noise';
 import { useAudio } from '../../context/AudioContext';
 
-const ROWS = 50;
-const COLS = 50;
+const ROWS = 60;
+const COLS = 60;
 const COUNT = ROWS * COLS;
-const SPACING = 0.4;
+const SPACING = 0.35;
 
 export const ParticleWave = ({ color1, color2 }) => {
-  const meshRef = useRef();
-  const { getFrequencyData } = useAudio();
+  const pointsRef = useRef();
+  const { getFrequencyData, getAudioMetrics } = useAudio();
   const noise3D = useMemo(() => createNoise3D(), []);
 
-  // Buffers for positions and colors
-  // But wait, changing 2500 instance matrices every frame is heavy but doable.
-  // Using Points might be faster and cooler for "Particles".
-  // Let's stick to InstancedMesh (cubes or spheres) for a "retro" look, or Points for "starfield" look.
-  // The user prompt image 2 is "Points/Lines". Points is efficient.
-
-  // Let's use Points.
-  const pointsRef = useRef();
-
-  const positions = useMemo(() => {
+  const { positions, colors } = useMemo(() => {
       const pos = new Float32Array(COUNT * 3);
+      const col = new Float32Array(COUNT * 3);
       let i = 0;
       for (let x = 0; x < COLS; x++) {
           for (let z = 0; z < ROWS; z++) {
               pos[i] = (x - COLS / 2) * SPACING;
               pos[i + 1] = 0;
               pos[i + 2] = (z - ROWS / 2) * SPACING;
+
+              col[i] = 1; col[i+1] = 1; col[i+2] = 1;
               i += 3;
           }
       }
-      return pos;
+      return { positions: pos, colors: col };
   }, []);
+
+  const baseColor = useMemo(() => new THREE.Color(color1 || "#00ffff"), [color1]);
+  const highColor = useMemo(() => new THREE.Color(color2 || "#ff00ff"), [color2]);
 
   useFrame(({ clock }) => {
       if (!pointsRef.current) return;
 
-      const data = getFrequencyData();
-      // Calculate a "bass" value for overall wave height
-      let bass = 0;
-      for(let k=0; k<10; k++) bass += data[k];
-      bass = bass / 10 / 255; // 0..1
-
+      const { bass, mid, high } = getAudioMetrics();
       const time = clock.getElapsedTime();
+
       const positionsAttribute = pointsRef.current.geometry.attributes.position;
+      const colorsAttribute = pointsRef.current.geometry.attributes.color;
 
       let i = 0;
+      let idx = 0;
+
+      // Dynamic parameters
+      const waveHeight = 2 + (bass * 8); // Huge bass waves
+      const speed = 0.4 + (high * 0.2);
+
       for (let x = 0; x < COLS; x++) {
           for (let z = 0; z < ROWS; z++) {
-              // x and z indices map to frequency?
-              // Or just noise animated by time + frequency punch.
 
-              // Let's use noise for the wave
               const xPos = (x - COLS / 2) * SPACING;
               const zPos = (z - ROWS / 2) * SPACING;
 
-              // Noise input scaling
-              const noiseAmp = 2 + (bass * 3); // Bass makes waves higher
-              const noiseFreq = 0.15;
-              const speed = 0.5;
+              // Simplex Noise
+              const noiseVal = noise3D(x * 0.1, z * 0.1 + time * speed, time * 0.2);
 
-              const y = noise3D(x * noiseFreq, z * noiseFreq + time * speed, time * 0.1) * noiseAmp;
+              // Secondary ripple from mids
+              const ripple = Math.sin(Math.sqrt(x*x + z*z) * 0.5 - time * 5) * mid * 2;
 
-              // Add some high freq spikes based on x index?
-              // Map X to frequency bins
-              const freqIndex = Math.floor((x / COLS) * 100);
-              const freqVal = (data[freqIndex] || 0) / 255;
+              const y = (noiseVal * waveHeight) + ripple;
 
-              const finalY = y + (freqVal * 2);
+              positionsAttribute.setY(idx, y);
 
-              // Update Y
-              positionsAttribute.setY(i, finalY);
+              // Color mapping based on height
+              // -waveHeight to +waveHeight -> 0..1
+              const t = (y / waveHeight + 1) / 2;
+              const c = new THREE.Color().copy(baseColor).lerp(highColor, t);
 
-              i++;
+              // Boost brightness on peaks
+              if (y > waveHeight * 0.5) c.multiplyScalar(1.5);
+
+              colorsAttribute.setXYZ(idx, c.r, c.g, c.b);
+
+              idx++;
           }
       }
       positionsAttribute.needsUpdate = true;
+      colorsAttribute.needsUpdate = true;
   });
 
   return (
@@ -91,14 +92,21 @@ export const ParticleWave = ({ color1, color2 }) => {
                 array={positions}
                 itemSize={3}
             />
+            <bufferAttribute
+                attach="attributes-color"
+                count={COUNT}
+                array={colors}
+                itemSize={3}
+            />
         </bufferGeometry>
         <pointsMaterial
-            size={0.15}
-            color={color1}
+            size={0.12}
+            vertexColors
             sizeAttenuation
             transparent
             opacity={0.8}
             blending={THREE.AdditiveBlending}
+            depthWrite={false}
         />
     </points>
   );

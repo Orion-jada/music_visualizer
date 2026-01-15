@@ -137,6 +137,43 @@ export const AudioProvider = ({ children }) => {
     return dataArrayRef.current;
   };
 
+  const getAudioMetrics = () => {
+    if (!analyserRef.current) return { bass: 0, mid: 0, high: 0, level: 0 };
+
+    // We rely on getFrequencyData being called or we call it here.
+    // Usually it's cheap to read the array again if it was just updated,
+    // but getByteFrequencyData copies data.
+    // Let's assume the loop calls getFrequencyData or this one.
+    // To be safe, we refresh it.
+    analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+    const data = dataArrayRef.current;
+
+    // Bass: ~20Hz - 200Hz (Bins 0-10 roughly with default FFT)
+    let bassSum = 0;
+    const bassCount = 10;
+    for (let i = 0; i < bassCount; i++) bassSum += data[i];
+    const bass = bassSum / bassCount / 255;
+
+    // Mid: ~200Hz - 2.5kHz (Bins 10-100)
+    let midSum = 0;
+    const midCount = 90;
+    for (let i = 10; i < 100; i++) midSum += data[i];
+    const mid = midSum / midCount / 255;
+
+    // High: 2.5kHz+ (Bins 100-300)
+    let highSum = 0;
+    let highCount = 0;
+    for (let i = 100; i < 300; i++) {
+        highSum += data[i];
+        highCount++;
+    }
+    const high = highSum / highCount / 255;
+
+    const level = (bass + mid + high) / 3;
+
+    return { bass, mid, high, level };
+  };
+
   // For Exporting: We need to expose the destination node (or create a stream destination)
   // But for now, let's keep it simple. The recorder will likely need to hook into this.
   const connectToDestination = (destinationNode) => {
@@ -159,6 +196,7 @@ export const AudioProvider = ({ children }) => {
       hasAudio,
       fileName,
       getFrequencyData,
+      getAudioMetrics,
       audioContext: audioContextRef, // Expose ref if needed
       connectToDestination,
       disconnectFromDestination

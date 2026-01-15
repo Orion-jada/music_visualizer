@@ -1,7 +1,7 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useAudio } from '../context/AudioContext';
 import { useRecorder } from '../hooks/useRecorder';
-import { Upload, Play, Pause, Music, FileAudio, Video, StopCircle } from 'lucide-react';
+import { Upload, Play, Pause, FileAudio, Video, StopCircle } from 'lucide-react';
 
 export const UI = () => {
   const { loadFile, isPlaying, togglePlay, hasAudio, fileName } = useAudio();
@@ -15,23 +15,52 @@ export const UI = () => {
     }
   }, [loadFile]);
 
-  const onDragOver = useCallback((e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
+  useEffect(() => {
+    let dragCounter = 0;
 
-  const onDragLeave = useCallback((e) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
+    const handleDragEnter = (e) => {
+      e.preventDefault();
+      dragCounter++;
+      if (dragCounter > 0) {
+        setIsDragging(true);
+      }
+    };
 
-  const onDrop = useCallback((e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('audio/')) {
-      loadFile(file);
-    }
+    const handleDragLeave = (e) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter <= 0) {
+        setIsDragging(false);
+        dragCounter = 0;
+      }
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+    };
+
+    const handleDrop = (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      setIsDragging(false);
+
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('audio/')) {
+        loadFile(file);
+      }
+    };
+
+    window.addEventListener('dragenter', handleDragEnter);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('drop', handleDrop);
+
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter);
+      window.removeEventListener('dragleave', handleDragLeave);
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('drop', handleDrop);
+    };
   }, [loadFile]);
 
   const toggleRecording = () => {
@@ -44,9 +73,6 @@ export const UI = () => {
 
   return (
     <div
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
       style={{
         position: 'absolute',
         top: 0,
@@ -54,7 +80,7 @@ export const UI = () => {
         width: '100%',
         height: '100%',
         zIndex: 100,
-        pointerEvents: isDragging ? 'auto' : 'none', // Block interactions when dragging
+        pointerEvents: isDragging ? 'auto' : 'none',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: isDragging ? 'center' : 'flex-start',
