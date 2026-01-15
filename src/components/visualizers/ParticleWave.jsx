@@ -9,9 +9,9 @@ const COLS = 60;
 const COUNT = ROWS * COLS;
 const SPACING = 0.35;
 
-export const ParticleWave = ({ color1, color2 }) => {
+export const ParticleWave = ({ color1, color2, reactivity = 1.0, speed = 0.5 }) => {
   const pointsRef = useRef();
-  const { getFrequencyData, getAudioMetrics } = useAudio();
+  const { getAudioMetrics } = useAudio();
   const noise3D = useMemo(() => createNoise3D(), []);
 
   const { positions, colors } = useMemo(() => {
@@ -43,35 +43,32 @@ export const ParticleWave = ({ color1, color2 }) => {
       const positionsAttribute = pointsRef.current.geometry.attributes.position;
       const colorsAttribute = pointsRef.current.geometry.attributes.color;
 
-      let i = 0;
       let idx = 0;
 
-      // Dynamic parameters
-      const waveHeight = 2 + (bass * 8); // Huge bass waves
-      const speed = 0.4 + (high * 0.2);
+      // Dynamic parameters scaled by reactivity
+      const waveHeight = (2 + (bass * 8)) * reactivity;
+      // Speed controls the Z-axis movement (horizontal flow)
+      // We scale time by 'speed' in the noise function
+      const flowSpeed = speed * (1 + high * 0.2);
 
       for (let x = 0; x < COLS; x++) {
           for (let z = 0; z < ROWS; z++) {
 
-              const xPos = (x - COLS / 2) * SPACING;
-              const zPos = (z - ROWS / 2) * SPACING;
-
               // Simplex Noise
-              const noiseVal = noise3D(x * 0.1, z * 0.1 + time * speed, time * 0.2);
+              // Use 'speed' to control how fast the noise field moves through the Z axis
+              const noiseVal = noise3D(x * 0.1, z * 0.1 + time * flowSpeed, time * 0.2);
 
               // Secondary ripple from mids
-              const ripple = Math.sin(Math.sqrt(x*x + z*z) * 0.5 - time * 5) * mid * 2;
+              const ripple = Math.sin(Math.sqrt(x*x + z*z) * 0.5 - time * 5) * mid * 2 * reactivity;
 
               const y = (noiseVal * waveHeight) + ripple;
 
               positionsAttribute.setY(idx, y);
 
-              // Color mapping based on height
-              // -waveHeight to +waveHeight -> 0..1
-              const t = (y / waveHeight + 1) / 2;
+              // Color mapping
+              const t = (y / (waveHeight || 1) + 1) / 2;
               const c = new THREE.Color().copy(baseColor).lerp(highColor, t);
 
-              // Boost brightness on peaks
               if (y > waveHeight * 0.5) c.multiplyScalar(1.5);
 
               colorsAttribute.setXYZ(idx, c.r, c.g, c.b);

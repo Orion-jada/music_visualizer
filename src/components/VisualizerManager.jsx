@@ -8,12 +8,14 @@ import { EffectComposer, Bloom, Vignette, Noise } from '@react-three/postprocess
 import { OrbitControls } from '@react-three/drei';
 
 export const VisualizerManager = () => {
-  const { mode, bloomIntensity, bloomThreshold, autoRotate, vignetteDarkness } = useControls('Settings', {
+  const { mode, bloomIntensity, bloomThreshold, autoRotate, vignetteDarkness, reactivity, waveSpeed } = useControls('Settings', {
     mode: { options: ['Spectrum Ring', 'Particle Wave', 'Neon Shapes', 'Black Hole'] },
+    reactivity: { value: 1.0, min: 0.1, max: 3.0, label: 'Audio Reactivity' },
     bloomIntensity: { value: 2.0, min: 0, max: 10 },
     bloomThreshold: { value: 0.15, min: 0, max: 1 },
     autoRotate: true,
     vignetteDarkness: { value: 1.1, min: 0, max: 2 },
+    waveSpeed: { value: 0.5, min: 0, max: 2.0, render: (get) => get('Settings.mode') === 'Particle Wave' },
   });
 
   const { color1, color2 } = useControls('Colors', {
@@ -34,7 +36,8 @@ export const VisualizerManager = () => {
          <CircularSpectrum
             color={color1}
             midColor={color2}
-            lowColor={color1} // Using color1 for bass for now
+            lowColor={color1}
+            reactivity={reactivity}
          />
       )}
 
@@ -42,6 +45,8 @@ export const VisualizerManager = () => {
          <ParticleWave
             color1={color1}
             color2={color2}
+            reactivity={reactivity}
+            speed={waveSpeed}
          />
       )}
 
@@ -49,6 +54,7 @@ export const VisualizerManager = () => {
          <NeonShapes
             color1={color1}
             color2={color2}
+            reactivity={reactivity}
          />
       )}
 
@@ -56,6 +62,7 @@ export const VisualizerManager = () => {
          <BlackHole
             color1={color1}
             color2={color2}
+            reactivity={reactivity}
          />
       )}
 

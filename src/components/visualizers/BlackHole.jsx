@@ -1,79 +1,76 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useAudio } from '../../context/AudioContext';
 
 const COUNT = 3000;
 
-export const BlackHole = ({ color1 = "#ffaa00", color2 = "#ffffff" }) => {
+export const BlackHole = ({ color1 = "#ffaa00", color2 = "#ffffff", reactivity = 1.0 }) => {
   const pointsRef = useRef();
   const { getAudioMetrics } = useAudio();
 
-  // Initial random positions (Disk)
-  // Store { angle, radius, speed, y } in a custom array or just use buffer attributes
-  // To avoid re-calc every frame in JS, we usually use shaders.
-  // But for <5000 points, JS loop is fine.
+  // Use a ref for mutable particle state to satisfy linter and React purity
+  const particlesRef = useRef([]);
 
-  const particles = useMemo(() => {
+  useEffect(() => {
       const data = [];
       for(let i=0; i<COUNT; i++) {
           const angle = Math.random() * Math.PI * 2;
-          const radius = 2 + Math.random() * 3; // 2 to 5
+          const radius = 2 + Math.random() * 3;
           const speed = 0.5 + Math.random() * 0.5;
-          const y = (Math.random() - 0.5) * 0.5; // Flattened disk
+          const y = (Math.random() - 0.5) * 0.5;
           data.push({ angle, radius, speed, y, initialRadius: radius });
       }
-      return data;
+      particlesRef.current = data;
   }, []);
 
   const positions = useMemo(() => new Float32Array(COUNT * 3), []);
   const colors = useMemo(() => new Float32Array(COUNT * 3), []);
 
-  const c1 = new THREE.Color(color1); // Inner/Core color
-  const c2 = new THREE.Color(color2); // Outer color
+  const c1 = useMemo(() => new THREE.Color(color1), [color1]);
+  const c2 = useMemo(() => new THREE.Color(color2), [color2]);
 
   useFrame(({ clock }) => {
-      if (!pointsRef.current) return;
+      if (!pointsRef.current || particlesRef.current.length === 0) return;
 
-      const { bass, high } = getAudioMetrics();
+      const { bass, mid, high } = getAudioMetrics();
       const positionsAttr = pointsRef.current.geometry.attributes.position;
       const colorsAttr = pointsRef.current.geometry.attributes.color;
 
-      // Expansion force from bass
-      const expansion = bass * 0.1;
-      const dt = 0.016; // Approx 60fps
+      const expansion = bass * 0.2 * reactivity;
+      const spinSpeed = 1 + (high * 3 * reactivity);
+      const dt = 0.016;
+
+      const particles = particlesRef.current;
 
       for(let i=0; i<COUNT; i++) {
           const p = particles[i];
 
           // Rotate
-          p.angle += p.speed * dt * (1 + high * 2); // Spin faster on highs
+          p.angle += p.speed * dt * spinSpeed;
 
-          // Spiral in defaults, but push out on bass
-          p.radius -= 0.01;
-          p.radius += expansion;
+          // Spiral dynamics
+          let currentRadius = p.radius + expansion;
+          p.radius -= 0.005; // Gravity
 
-          // Reset if sucked in too much
           if (p.radius < 0.5) {
               p.radius = 4 + Math.random();
           }
-          if (p.radius > 6) {
-              p.radius = 6;
-          }
 
-          const x = Math.cos(p.angle) * p.radius;
-          const z = Math.sin(p.angle) * p.radius;
+          const wobble = Math.sin(clock.elapsedTime * 2 + p.angle * 3) * (mid * 0.5 * reactivity);
 
-          positionsAttr.setXYZ(i, x, p.y + (Math.sin(clock.elapsedTime + p.angle)*0.2), z);
+          const x = Math.cos(p.angle) * currentRadius;
+          const z = Math.sin(p.angle) * currentRadius;
 
-          // Color Gradient based on radius
-          // Inner (small radius) -> Hot/White?
-          // Let's say Inner = Color1, Outer = Color2
-          const t = Math.min(1, Math.max(0, (p.radius - 1) / 4));
+          positionsAttr.setXYZ(i, x, p.y + wobble, z);
+
+          // Color Gradient
+          const t = Math.min(1, Math.max(0, (currentRadius - 1) / 4));
           const c = new THREE.Color().copy(c1).lerp(c2, t);
 
-          // Boost brightness near center
-          if (p.radius < 1.5) c.multiplyScalar(2);
+          if (bass > 0.5) {
+             c.multiplyScalar(1 + (bass * 0.5 * reactivity));
+          }
 
           colorsAttr.setXYZ(i, c.r, c.g, c.b);
       }
@@ -99,7 +96,7 @@ export const BlackHole = ({ color1 = "#ffaa00", color2 = "#ffffff" }) => {
             />
         </bufferGeometry>
         <pointsMaterial
-            size={0.05}
+            size={0.06}
             vertexColors
             transparent
             opacity={0.8}
